@@ -24,7 +24,8 @@ defmodule Dynamo do
     num_replicas: nil , # Number of nodes to replicate at
     num_writes: nil , # Number of nodes that need to reply to a write operation
     num_reads: nil, # Number of nodes that need to reply to a read operation
-    local_store: nil
+    local_store: nil, 
+    ring: nil 
   )
 
 
@@ -39,16 +40,85 @@ defmodule Dynamo do
       num_virtual_nodes: t, 
       num_replicas: n, 
       num_writes: w, 
-      num_reads: r
+      num_reads: r, 
+      ring: HashRing.new([], n)
     }
   end 
 
+  # @spec get_preference_list_helper(any(), ) :: list() '
+  
+  defp get_preference_helper(curr_count, curr_index, preference_list, node_set ,count, initial_index, node_list, first ) do 
+    if curr_count == count or (curr_index == initial_index and not first) do 
+      # @TODO : fix this count bit to see 
+      preference_list 
+    else 
+      # # Enum.at(node_list, curr_index) 
+      # preference_list = preference_list ++ [Enum.at(node_list, curr_index) ] 
+      # IO.puts("SECOND #{inspect(preference_list)}")
+      # curr_count = curr_count + 1 
+      # get_preference_helper(curr_count, curr_index, preference_list, node_set ,count, initial_index, node_list)
+
+
+      if(not MapSet.member?(node_set, Enum.at(node_list, curr_index)) ) do 
+        preference_list = preference_list ++ [Enum.at(node_list, curr_index)] 
+        curr_count = curr_count + 1 
+        node_set = MapSet.put(node_set, Enum.at(node_list, curr_index) )
+        curr_index = if curr_index == length(node_list) - 1 do 0 else curr_index + 1 end
+        get_preference_helper(curr_count, curr_index, preference_list, node_set ,count, initial_index, node_list, false)
+      else 
+        curr_index = if curr_index == length(node_list) - 1 do 0 else curr_index + 1 end
+        get_preference_helper(curr_count, curr_index, preference_list, node_set ,count, initial_index, node_list, false)
+      end 
+    end 
+
+
+  end
+
+
+
   @spec get_preference_list(any(), string(), non_neg_integer()) :: list() 
   defp get_preference_list(nodeList, key, count) do 
-    a = PhStTransform.transform(nodeList, %{Tuple => fn(tuple) -> Tuple.to_list(tuple) end})
-    Enum.each(a, fn [h|t] -> IO.puts("#{inspect(t)}") end)
-    # for h in a 
-    #  IO.puts("#{inspect(a)}")
+    # nodes = PhStTransform.transform(nodeList, %{Tuple => fn(tuple) -> Tuple.to_list(tuple) end})
+    hash_list = Enum.map(nodeList, fn [hash| _] -> hash end)
+    node_list = Enum.map(nodeList, fn [_| node] -> node end)
+    initial_node = Bisect.bisect_left(hash_list, Utils.hash(key))
+
+    final = get_preference_helper(0, initial_node, [], MapSet.new() ,count, initial_node, node_list, true )
+    IO.puts("Preference List: #{inspect(final)}")
+    # IO.puts("#{inspect(node_list)}")
+    # IO.puts("#{inspect(Utils.hash(key))}")
+
+    # IO.puts("#{initial_node}")
+
+    
+
+    # # IO.puts("#{inspect(nodeList)}")
+    # # IO.puts("#{inspect(Utils.hash(key))}")
+
+    # a = PhStTransform.transform(nodeList, %{Tuple => fn(tuple) -> Tuple.to_list(tuple) end})
+
+    # # {hashlist, nodes } = Enum.unzip(a)
+    # hashlist = Enum.map(a, fn [hash| _] -> hash end)
+
+    # # second = Enum.at(hashlist, 3)
+    # IO.puts("#{inspect(second)}")
+
+    # # IO.puts("#{inspect(nodeList)}")
+    # # hashlist = [] 
+    # # hashlist = [0 | hashlist]
+    # # Enum.each(a, fn [h|t] -> h end)
+
+  
+    # IO.puts("Hashlist #{inspect(hashlist)}")
+    # # search(hashlist, fn x -> x > Utils.hash(key) end)
+    # IO.puts("Bisec #{inspect(Bisect.bisect_left([2,5],4))}")
+
+    #   #     iex> Bisect.search([1, 2, 4, 8], fn x ->
+    #   # ...>   x == 7
+    #   # ...> end)
+
+    # # for h in a 
+    # #  IO.puts("#{inspect(a)}")
 
   end 
 
@@ -59,8 +129,13 @@ defmodule Dynamo do
     ring = HashRing.new([], 2)
     {:ok, ring} = HashRing.add_node(ring, "a")
     {:ok, ring} = HashRing.add_node(ring, "b")
-    nodes = HashRing.find_node(ring, "key1")
-    get_preference_list(ring.items, "key1" , state.num_replicas)
+    {:ok, ring} = HashRing.add_node(ring, "c")
+    {:ok, ring} = HashRing.add_node(ring, "d")
+    {:ok, ring} = HashRing.add_node(ring, "e")
+    nodes = HashRing.find_node(ring, "ag")
+    IO.puts("#{inspect(ring.items)}")
+    ringList =  PhStTransform.transform(ring.items, %{Tuple => fn(tuple) -> Tuple.to_list(tuple) end})
+    get_preference_list(ringList, "ag" , state.num_replicas)
 
     # IO.puts("UTILS!! #{inspect(Utils.hash("key20"))}")
     # IO.puts(" #{inspect(nodes)}")
