@@ -104,8 +104,8 @@ defmodule Dynamo do
   @spec become_server(%Dynamo{}) :: no_return() 
   def become_server(state) do 
     {:ok, ring} = HashRing.add_node(state.ring, whoami())
-    state = %{state | ring: ring, local_store: %{}, pending_put_req: %{}, pending_put_rsp: %{}, pending_get_req: %{}, pending_get_rsp: %{}, failed_nodes: MapSet.new()}
-
+    state = %{state |  local_store: %{}, pending_put_req: %{}, pending_put_rsp: %{}, pending_get_req: %{}, pending_get_rsp: %{}, failed_nodes: MapSet.new()}
+    state = add_nodes_to_ring(state, 0)
     server(state, nil)
   end
 
@@ -131,7 +131,15 @@ defmodule Dynamo do
         state = store(state, key, value, metadata)
         IO.puts("Put #{inspect(state.local_store)}")
         server(state, nil)
+      {sender,  %Dynamo.GetMessage{
+          key: key,
+          metadata: metadata, 
+        }} 
 
+      {sender,  %Dynamo.GetMessage{
+          key: key,
+          metadata: metadata, 
+        }} 
       
     end
     

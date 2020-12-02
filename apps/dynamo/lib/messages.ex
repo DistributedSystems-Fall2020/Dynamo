@@ -87,3 +87,48 @@ defmodule Dynamo.GetMessage do
         }
     end
 end
+
+# @TODO change the structure
+defmodule Dynamo.GetMessageResp do 
+    alias __MODULE__
+    @enforce_keys [:key, :metadata]
+    defstruct(
+        key: nil, 
+        metadata: nil, 
+    )
+
+    @spec new(string(), map()) :: 
+                %GetMessage{
+                    key: string(), 
+                    metadata: map()
+                }
+    def new(key, metadata) do 
+        %GetMessage{
+            key: key, 
+            metadata: metadata, 
+        }
+    end
+end
+
+# @TODO change the structure
+defmodule Dynamo.PutMessageResp do 
+    alias __MODULE__
+    @enforce_keys [:key, :metadata]
+    defstruct(
+        key: nil, 
+        metadata: nil, 
+    )
+
+    @spec new(string(), map()) :: 
+                %GetMessage{
+                    key: string(), 
+                    metadata: map()
+                }
+    def new(key, metadata) do 
+        %GetMessage{
+            key: key, 
+            metadata: metadata, 
+        }
+    end
+end
+
