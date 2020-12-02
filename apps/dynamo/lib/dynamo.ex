@@ -89,11 +89,23 @@ defmodule Dynamo do
 
   end 
 
+  @spec add_nodes_to_ring(map(), non_neg_integer()) :: map()
+  defp  add_nodes_to_ring(state, pos) do
+    if pos == length(state.node_list) do
+      state
+    else
+      node = Enum.at(state.node_list, pos)
+      ring = state.ring 
+      {:ok, ring} = HashRing.add_node(state.ring, node)
+      add_nodes_to_ring(%{state | ring: ring}, pos+1) 
+    end
+  end
 
   @spec become_server(%Dynamo{}) :: no_return() 
   def become_server(state) do 
     {:ok, ring} = HashRing.add_node(state.ring, whoami())
     state = %{state | ring: ring, local_store: %{}, pending_put_req: %{}, pending_put_rsp: %{}, pending_get_req: %{}, pending_get_rsp: %{}, failed_nodes: MapSet.new()}
+
     server(state, nil)
   end
 
@@ -152,6 +164,15 @@ defmodule Dynamo do
     else 
       {nil,nil}
     end
+  end
+
+  @spec test_add_to_ring() :: no_return()
+  def test_add_to_ring() do
+
+    state = new_configuration(10,3,2,2, [:b, :c])
+    state = add_nodes_to_ring(state, 0)
+
+    IO.puts("Testing store: #{inspect(state.ring)}")
   end
 
   @spec test_store() :: no_return()
