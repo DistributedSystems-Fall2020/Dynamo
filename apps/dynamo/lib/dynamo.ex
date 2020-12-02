@@ -121,6 +121,7 @@ defmodule Dynamo do
         msg  = retrieve(state, key)   
         IO.puts("Retrieved the message #{inspect(msg)}")     
         server(state, nil)
+
       {sender,  %Dynamo.Client.PutMessage{
             key: key,
             value: value,
@@ -131,16 +132,43 @@ defmodule Dynamo do
         state = store(state, key, value, metadata)
         IO.puts("Put #{inspect(state.local_store)}")
         server(state, nil)
-      {sender,  %Dynamo.GetMessage{
-          key: key,
-          metadata: metadata, 
-        }} 
 
-      {sender,  %Dynamo.GetMessage{
+      {sender,  %Dynamo.GetRequest{
           key: key,
           metadata: metadata, 
-        }} 
-      
+          seqno: seqno
+        }} -> 
+        IO.puts("Server received get request")
+        server(state, nil)
+
+      {sender,  %Dynamo.PutRequest{
+          key: key,
+          value: value,
+          metadata: metadata, 
+          seqno: seqno
+        }} -> 
+        IO.puts("Server received put request")
+        server(state, nil)
+
+      {sender,  %Dynamo.GetResponse{
+          key: key,
+          value: value,
+          metadata: metadata, 
+          seqno: seqno
+        }} -> 
+        IO.puts("Server received get request")
+        server(state, nil)
+
+      {sender,  %Dynamo.PutResponse{
+          key: key,
+          value: value,
+          metadata: metadata, 
+          status: status,
+          seqno: seqno
+        }} -> 
+        IO.puts("Server received put request")
+        server(state, nil)
+
     end
     
 
