@@ -4,7 +4,7 @@ defmodule Dynamo do
   """
   # Shouldn't need to spawn anything from this module, but if you do
   # you should add spawn to the imports.
-  import Emulation, only: [send: 2, timer: 1, now: 0, whoami: 0, cancel_timer: 1]
+  import Emulation, only: [send: 2, timer: 1, now: 0, whoami: 0, cancel_timer: 1, spawn: 2]
 
   import Kernel,
     except: [spawn: 3, spawn: 1, spawn_link: 1, spawn_link: 3, send: 2]
@@ -32,7 +32,8 @@ defmodule Dynamo do
     pending_get_rsp: nil, 
     failed_nodes: nil, 
     seed_node: nil, 
-    node_list: nil
+    node_list: nil, 
+    seq_no: nil
   )
 
 
@@ -51,7 +52,8 @@ defmodule Dynamo do
       num_writes: w, 
       num_reads: r,
       ring: ring, 
-      node_list: nodes
+      node_list: nodes, 
+      seq_no: 1
     }
   end 
 
@@ -63,7 +65,7 @@ defmodule Dynamo do
       preference_list 
     else 
       if(not MapSet.member?(node_set, Enum.at(node_list, curr_index)) ) do 
-        preference_list = preference_list ++ [Enum.at(node_list, curr_index)] 
+        preference_list = preference_list ++ Enum.at(node_list, curr_index)
         curr_count = curr_count + 1 
         node_set = MapSet.put(node_set, Enum.at(node_list, curr_index) )
         curr_index = if curr_index == length(node_list) - 1 do 0 else curr_index + 1 end
@@ -73,14 +75,13 @@ defmodule Dynamo do
         get_preference_helper(curr_count, curr_index, preference_list, node_set ,count, initial_index, node_list, false)
       end 
     end 
-
-
   end
 
 
 
   @spec get_preference_list(any(), string(), non_neg_integer()) :: list() 
-  defp get_preference_list(nodeList, key, count) do 
+  defp get_preference_list(ring, key, count) do 
+    nodeList = ringList =  PhStTransform.transform(ring.items, %{Tuple => fn(tuple) -> Tuple.to_list(tuple) end})
     hash_list = Enum.map(nodeList, fn [hash| _] -> hash end)
     node_list = Enum.map(nodeList, fn [_| node] -> node end)
     initial_node = Bisect.bisect_left(hash_list, Utils.hash(key))
@@ -109,6 +110,14 @@ defmodule Dynamo do
     server(state, nil)
   end
 
+  @spec send_to_members(list(), any()) :: atom()
+  defp send_to_members(preference_list, msg) do 
+    Enum.each(preference_list, fn a -> 
+      send(a, msg)
+    #  IO.puts("Sending messsage to #{a}") 
+    end)
+  end 
+
 
   def server(state, extra_state) do 
     receive do
@@ -116,7 +125,24 @@ defmodule Dynamo do
                   key: key,
                   metadata: metadata, 
                 }} ->  
+        
+        preference_list =  get_preference_list(state.ring, key, state.num_replicas)
+        if not Enum.member?(preference_list, whoami()) and length(preference_list) >= 1 do   
+          send(Enum.at(preference_list, 0), %Dynamo.Client.GetMessage{
+            key: key,
+            metadata: metadata, 
+          })
+          server(state, nil)
+        end 
 
+        # @TODO: contruct Dynamo Get message and send it to the nodes in the preference list
+        # use helper function 
+        # use sequence number 
+        # once you've send it update your  pending_put_rsp[seqno] = set() and pending_put_msg[seqno] = msg as 
+        # done in Pynamo. Do the same for write except get preference list of N + 3/ so to account for failures..?
+        # Have to discuss that or check Pynamo. 
+
+        IO.puts("The preference list is #{inspect(preference_list)}")
         IO.puts("get message works")  
         msg  = retrieve(state, key)   
         IO.puts("Retrieved the message #{inspect(msg)}")     
@@ -227,7 +253,7 @@ defmodule Dynamo do
   end
 end
 
-
+# @TODO : Add getting random node for client
 defmodule Dynamo.Client do
   import Emulation, only: [send: 2]
 
