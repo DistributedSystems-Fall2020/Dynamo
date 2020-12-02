@@ -121,14 +121,6 @@ defmodule Dynamo do
         msg  = retrieve(state, key)   
         IO.puts("Retrieved the message #{inspect(msg)}")     
         server(state, nil)
-      #   IO.puts("GOT MESSAGE FROM THE CLIENT")
-      #   #set it to N in the preference list 
-      #   #if R reply, send back to client 
-        
-      #   #check if the key exists in the local store 
-
-      #   # code
-      #   raise "Not yet implemented"
       {sender,  %Dynamo.Client.PutMessage{
             key: key,
             value: value,
