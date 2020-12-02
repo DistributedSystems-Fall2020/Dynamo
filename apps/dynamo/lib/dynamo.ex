@@ -59,34 +59,39 @@ defmodule Dynamo do
 
   # @spec get_preference_list_helper(any(), ) :: list() '
   
-  defp get_preference_helper(curr_count, curr_index, preference_list, node_set ,count, initial_index, node_list, first ) do 
+  defp get_preference_helper(curr_count, curr_index, preference_list, node_set ,count, initial_index, node_list, avoid , avoided,first ) do 
     if curr_count == count or (curr_index == initial_index and not first) do 
-      # @TODO : fix this count bit to see 
-      preference_list 
+      {preference_list, avoided} 
     else 
-      if(not MapSet.member?(node_set, Enum.at(node_list, curr_index)) ) do 
-        preference_list = preference_list ++ Enum.at(node_list, curr_index)
+      if(not MapSet.member?(node_set, Enum.at(node_list, curr_index)) and not MapSet.member?(avoid, Enum.at(node_list, curr_index))) do 
+        preference_list = preference_list ++ [Enum.at(node_list, curr_index)]
         curr_count = curr_count + 1 
         node_set = MapSet.put(node_set, Enum.at(node_list, curr_index) )
         curr_index = if curr_index == length(node_list) - 1 do 0 else curr_index + 1 end
-        get_preference_helper(curr_count, curr_index, preference_list, node_set ,count, initial_index, node_list, false)
+        get_preference_helper(curr_count, curr_index, preference_list, node_set ,count, initial_index, node_list, avoid, avoided ,false)
       else 
+        avoided = if MapSet.member?(avoid, Enum.at(node_list, curr_index)) do MapSet.put(avoided, Enum.at(node_list, curr_index) ) else avoided end
+        IO.puts("AVOIDED #{inspect(Enum.at(node_list, curr_index))} #{inspect(avoid)} #{inspect(MapSet.member?(avoid, :b))}")
+        
         curr_index = if curr_index == length(node_list) - 1 do 0 else curr_index + 1 end
-        get_preference_helper(curr_count, curr_index, preference_list, node_set ,count, initial_index, node_list, false)
+        get_preference_helper(curr_count, curr_index, preference_list, node_set ,count, initial_index, node_list, avoid, avoided ,false)
       end 
     end 
   end
 
 
 
-  @spec get_preference_list(any(), string(), non_neg_integer()) :: list() 
-  defp get_preference_list(ring, key, count) do 
-    nodeList = ringList =  PhStTransform.transform(ring.items, %{Tuple => fn(tuple) -> Tuple.to_list(tuple) end})
+  @spec get_preference_list(any(), string(), non_neg_integer(), any()) :: list() 
+  defp get_preference_list(ring, key, count, failed_nodes) do 
+    nodeList = PhStTransform.transform(ring.items, %{Tuple => fn(tuple) -> Tuple.to_list(tuple) end})
+
     hash_list = Enum.map(nodeList, fn [hash| _] -> hash end)
     node_list = Enum.map(nodeList, fn [_| node] -> node end)
+    node_list = List.flatten(node_list)
+    IO.puts("nodelist #{inspect(node_list)}")
     initial_node = Bisect.bisect_left(hash_list, Utils.hash(key))
-
-    get_preference_helper(0, initial_node, [], MapSet.new() ,count, initial_node, node_list, true )
+   
+    get_preference_helper(0, initial_node, [], MapSet.new() ,count, initial_node, node_list, failed_nodes, MapSet.new(), true )
 
   end 
 
