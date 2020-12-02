@@ -25,7 +25,14 @@ defmodule Dynamo do
     num_writes: nil , # Number of nodes that need to reply to a write operation
     num_reads: nil, # Number of nodes that need to reply to a read operation
     local_store: nil, 
-    ring: nil 
+    ring: nil,
+    pending_put_req: nil,
+    pending_put_rsp: nil,
+    pending_get_req: nil,
+    pending_get_rsp: nil, 
+    failed_nodes: nil, 
+    seed_node: nil, 
+    node_list: nil
   )
 
 
@@ -33,15 +40,18 @@ defmodule Dynamo do
     non_neg_integer(), 
     non_neg_integer(), 
     non_neg_integer(), 
-    non_neg_integer()
+    non_neg_integer(), 
+    list()
   ) :: %Dynamo{}
-  def new_configuration(t, n, w, r) do
+  def new_configuration(t, n, w, r, nodes) do
+    ring = HashRing.new([], t)
     %Dynamo{
       num_virtual_nodes: t, 
       num_replicas: n, 
       num_writes: w, 
-      num_reads: r, 
-      ring: HashRing.new([], n)
+      num_reads: r,
+      ring: ring, 
+      node_list: nodes
     }
   end 
 
@@ -52,13 +62,6 @@ defmodule Dynamo do
       # @TODO : fix this count bit to see 
       preference_list 
     else 
-      # # Enum.at(node_list, curr_index) 
-      # preference_list = preference_list ++ [Enum.at(node_list, curr_index) ] 
-      # IO.puts("SECOND #{inspect(preference_list)}")
-      # curr_count = curr_count + 1 
-      # get_preference_helper(curr_count, curr_index, preference_list, node_set ,count, initial_index, node_list)
-
-
       if(not MapSet.member?(node_set, Enum.at(node_list, curr_index)) ) do 
         preference_list = preference_list ++ [Enum.at(node_list, curr_index)] 
         curr_count = curr_count + 1 
@@ -78,146 +81,101 @@ defmodule Dynamo do
 
   @spec get_preference_list(any(), string(), non_neg_integer()) :: list() 
   defp get_preference_list(nodeList, key, count) do 
-    # nodes = PhStTransform.transform(nodeList, %{Tuple => fn(tuple) -> Tuple.to_list(tuple) end})
     hash_list = Enum.map(nodeList, fn [hash| _] -> hash end)
     node_list = Enum.map(nodeList, fn [_| node] -> node end)
     initial_node = Bisect.bisect_left(hash_list, Utils.hash(key))
 
-    final = get_preference_helper(0, initial_node, [], MapSet.new() ,count, initial_node, node_list, true )
-    IO.puts("Preference List: #{inspect(final)}")
-    # IO.puts("#{inspect(node_list)}")
-    # IO.puts("#{inspect(Utils.hash(key))}")
-
-    # IO.puts("#{initial_node}")
-
-    
-
-    # # IO.puts("#{inspect(nodeList)}")
-    # # IO.puts("#{inspect(Utils.hash(key))}")
-
-    # a = PhStTransform.transform(nodeList, %{Tuple => fn(tuple) -> Tuple.to_list(tuple) end})
-
-    # # {hashlist, nodes } = Enum.unzip(a)
-    # hashlist = Enum.map(a, fn [hash| _] -> hash end)
-
-    # # second = Enum.at(hashlist, 3)
-    # IO.puts("#{inspect(second)}")
-
-    # # IO.puts("#{inspect(nodeList)}")
-    # # hashlist = [] 
-    # # hashlist = [0 | hashlist]
-    # # Enum.each(a, fn [h|t] -> h end)
-
-  
-    # IO.puts("Hashlist #{inspect(hashlist)}")
-    # # search(hashlist, fn x -> x > Utils.hash(key) end)
-    # IO.puts("Bisec #{inspect(Bisect.bisect_left([2,5],4))}")
-
-    #   #     iex> Bisect.search([1, 2, 4, 8], fn x ->
-    #   # ...>   x == 7
-    #   # ...> end)
-
-    # # for h in a 
-    # #  IO.puts("#{inspect(a)}")
+    get_preference_helper(0, initial_node, [], MapSet.new() ,count, initial_node, node_list, true )
 
   end 
 
 
   @spec become_server(%Dynamo{}) :: no_return() 
   def become_server(state) do 
-    IO.puts("hi")
-    ring = HashRing.new([], 2)
-    {:ok, ring} = HashRing.add_node(ring, "a")
-    {:ok, ring} = HashRing.add_node(ring, "b")
-    {:ok, ring} = HashRing.add_node(ring, "c")
-    {:ok, ring} = HashRing.add_node(ring, "d")
-    {:ok, ring} = HashRing.add_node(ring, "e")
-    nodes = HashRing.find_node(ring, "ag")
-    IO.puts("#{inspect(ring.items)}")
-    ringList =  PhStTransform.transform(ring.items, %{Tuple => fn(tuple) -> Tuple.to_list(tuple) end})
-    get_preference_list(ringList, "ag" , state.num_replicas)
-
-    # IO.puts("UTILS!! #{inspect(Utils.hash("key20"))}")
-    # IO.puts(" #{inspect(nodes)}")
-
-    # IO.puts("#{inspect(ring.items)}")
-    # IO.puts("#{inspect(ring2)}")
-    # print_st(state)
+    {:ok, ring} = HashRing.add_node(state.ring, whoami())
+    state = %{state | ring: ring, local_store: %{}, pending_put_req: %{}, pending_put_rsp: %{}, pending_get_req: %{}, pending_get_rsp: %{}, failed_nodes: MapSet.new()}
+    server(state, nil)
   end
 
-  defp print_st(state) do 
-    IO.puts("hi")
 
+  def server(state, extra_state) do 
+    receive do
+      {sender,  %Dynamo.Client.GetMessage{
+                  key: key,
+                  metadata: metadata, 
+                }} ->  
+
+        IO.puts("get message works")  
+        msg  = retrieve(state, key)   
+        IO.puts("Retrieved the message #{inspect(msg)}")     
+        server(state, nil)
+      #   IO.puts("GOT MESSAGE FROM THE CLIENT")
+      #   #set it to N in the preference list 
+      #   #if R reply, send back to client 
+        
+      #   #check if the key exists in the local store 
+
+      #   # code
+      #   raise "Not yet implemented"
+      {sender,  %Dynamo.Client.PutMessage{
+            key: key,
+            value: value,
+            metadata: metadata
+          }} -> 
+
+        IO.puts("put message works")
+        state = store(state, key, value, metadata)
+        IO.puts("Put #{inspect(state.local_store)}")
+        server(state, nil)
+
+      
+    end
+    
+
+  end
+
+
+  defp print_st(state) do 
+    IO.puts("----- Printing state ----")
     IO.puts("#{inspect(state)}")
   end 
   
-  # @spec reliable_kv_server(map(), number()) :: no_return()
-  # defp reliable_kv_server(state) do
-  #   receive do
-  #     {sender, {@get, key}} ->
-  #       # TODO: Send a message `{key, current value(key)}`
-  #       # to the sender using `reliable_send`.
-  #       # If the key is not currently present send
-  #       # `{key, nil}`. You might find
-  #       # https://hexdocs.pm/elixir/Map.html
-  #       # useful.
-  #       # You should use count as the nonce for
-  #       # reliable_send, and update it each time you
-  #       # send a message.
-  #       value = Map.get(state, key)
-  #       message = {key, value}
-  #       send(sender, message)
-  #       reliable_kv_server(state)
+  defp store(state, key, value, metadata) do
+    local_store = Map.put(state.local_store, key, {value, metadata})
+    %{state | local_store: local_store}
+  end
 
-  #     {_sender, {@set, key, {value, context}}} ->
-  #       # TODO: Store  value for the given key
-  #       # in the state. You should not send any
-  #       # message to the sender. You might find
-  #       # https://hexdocs.pm/elixir/Map.html
-  #       # useful.
-  #       state = Map.put(state, key, {value, context})
-  #       reliable_kv_server(state)
-  #   end
-  # end
+  defp retrieve(state, key) do 
+    local_store = state.local_store 
+    if Map.has_key?(local_store, key) do 
+      Map.get(local_store, key) 
+    else 
+      {nil,nil}
+    end
+  end
 
-  # @spec test_kv_client(atom(), pid()) :: boolean()
-  # defp test_kv_client(server, caller) do
-  #   reliable_send(server, {@set, :a, 1}, 1, @send_timeout)
-  #   reliable_send(server, {@set, :b, 22}, 2, @send_timeout)
-  #   reliable_send(server, {@get, :a}, 3, @send_timeout)
+  @spec test_store() :: no_return()
+  def test_store() do
+    key = "ag"
+    value = 1
+    metadata = %{}
+    state = new_configuration(10,3,2,2, [:b, :c])
+    state = %{state | local_store: %{}}
+    state = store(state, key, value, metadata)
+    IO.puts("Testing store: #{inspect(state)}")
+  end
 
-  #   case reliable_receive() do
-  #     {^server, m} ->
-  #       send(caller, m == {:a, 1})
-  #       m == {:a, 1}
-
-  #     _ ->
-  #       send(caller, false)
-  #       false
-  #   end
-  # end
-
-  # @doc """
-  # Test reliable key value server.
-  # """
-  # @spec test_reliable_kv_server() :: bool()
-  # def test_reliable_kv_server do
-  #   Emulation.init()
-  #   Emulation.append_fuzzers([Fuzzers.drop(0.01), Fuzzers.delay(10.0)])
-  #   spawn(:server, &reliable_kv_server/0)
-  #   pid = self()
-  #   spawn(:client, fn -> test_kv_client(:server, pid) end)
-
-  #   receive do
-  #     true -> true
-  #     _ -> false
-  #   end
-  # after
-  #   Emulation.terminate()
-  # end
-# end
-
-
+  @spec test_retrieve() :: no_return()
+  def test_retrieve() do
+    key = "ag"
+    value = 1
+    metadata = %{}
+    state = new_configuration(10,3,2,2, [:b, :c])
+    state = %{state | local_store: %{}}
+    state = store(state, key, value, metadata)
+    value = retrieve(state, key) 
+    IO.puts("Testing retrieve: #{inspect(value)}")
+  end
 end
 
 
@@ -227,4 +185,47 @@ defmodule Dynamo.Client do
   import Kernel,
     except: [spawn: 3, spawn: 1, spawn_link: 1, spawn_link: 3, send: 2]
 
+  alias __MODULE__ 
+  @enforce_keys [:server]
+  defstruct(server: nil, local_store: nil) 
+  
+  @spec new_client(atom()) :: %Client{server: atom()}
+  def new_client(member) do 
+    IO.puts("CREATING A CLIENT")
+    %Client{server: member, 
+            local_store: %{}}
+  end 
+
+  @spec put(%Client{}, string(), map() , non_neg_integer(), atom()) :: boolean()
+  def put(client, key, metadata, value, server) do 
+    # client sends a request, waits for a time .
+    server = client.server
+    # if map[key] do 
+    #   send(server, {:put, {key, {value, local_store[key]}}})
+    # else 
+    #   send(server, {:put, {key, {value, }}})
+    send(server, %Dynamo.Client.PutMessage{
+                    key: key, 
+                    metadata: metadata,
+                    value: value
+                  }
+                )
+
+  end
+
+  @spec get(%Client{}, string(), map(), atom()) :: boolean()
+  def get(client, key, metadata, server) do 
+    #the test case generates a random server. This way we have more control over which 
+    #server need to send it to. This helps in testing the redirection 
+    server = client.server
+    send(server, %Dynamo.Client.GetMessage{
+                    key: key, 
+                    metadata: metadata
+                  }
+                )
+  end
+
 end
+
+
+

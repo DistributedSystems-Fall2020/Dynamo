@@ -1,4 +1,4 @@
-defmodule Raft.MixProject do
+defmodule Dynamo.MixProject do
   use Mix.Project
 
   def project do
