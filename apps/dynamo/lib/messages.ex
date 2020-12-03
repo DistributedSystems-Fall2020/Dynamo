@@ -1,23 +1,26 @@
 defmodule Dynamo.Client.PutMessage do 
     alias __MODULE__
-    @enforce_keys [:key, :value, :metadata]
+    @enforce_keys [:key, :value, :metadata, :client]
     defstruct(
         key: nil, 
         value: nil,
-        metadata: nil
+        metadata: nil,
+        client: nil
     )
 
-    @spec new(string(), non_neg_integer(), map()) :: 
+    @spec new(string(), non_neg_integer(), map(), atom()) :: 
                 %PutMessage{
                     key: string(), 
                     value: non_neg_integer(), 
                     metadata: map(), 
+                    client: atom()
                 }
-    def new(key, value, metadata) do 
+    def new(key, value, metadata, client) do 
         %PutMessage{
             key: key, 
             value: value, 
             metadata: metadata, 
+            client: client
         }
     end
 end
@@ -28,81 +31,89 @@ defmodule Dynamo.Client.GetMessage do
     defstruct(
         key: nil, 
         metadata: nil, 
+        client: nil
     )
 
-    @spec new(string(), map()) :: 
+    @spec new(string(), map(), atom()) :: 
                 %GetMessage{
                     key: string(), 
-                    metadata: map()
+                    metadata: map(),
+                    client: atom()
                 }
-    def new(key, metadata) do 
+    def new(key, metadata, client) do 
         %GetMessage{
             key: key, 
             metadata: metadata, 
+            client: client
         }
     end
 end
 
 defmodule Dynamo.PutRequest do 
     alias __MODULE__
-    @enforce_keys [:key, :value, :metadata, :seqno]
+    @enforce_keys [:key, :value, :metadata, :seq_no, :handoff]
     defstruct(
         key: nil, 
         value: nil,
         metadata: nil,
-        seqno: nil
+        seq_no: nil,
+        handoff: nil
     )
 
-    @spec new(string(), non_neg_integer(), map(), non_neg_integer()) :: 
+    @spec new(string(), non_neg_integer(), map(), non_neg_integer(), atom()) :: 
                 %PutRequest{
                     key: string(), 
                     value: non_neg_integer(), 
                     metadata: map(), 
-                    seqno: non_neg_integer()
+                    seq_no: non_neg_integer(),
+                    handoff: atom()
                 }
-    def new(key, value, metadata, seqno) do 
+    def new(key, value, metadata, seq_no, handoff) do 
         %PutRequest{
             key: key, 
             value: value, 
             metadata: metadata, 
-            seqno: seqno
+            seq_no: seq_no,
+            handoff: handoff
         }
     end
 end
 
 defmodule Dynamo.GetRequest do 
     alias __MODULE__
-    @enforce_keys [:key, :metadata, :seqno]
+    @enforce_keys [:key, :metadata, :seq_no, :handoff]
     defstruct(
         key: nil, 
         metadata: nil, 
-        seqno: nil
+        seq_no: nil,
+        handoff: nil
     )
 
-    @spec new(string(), map(), non_neg_integer()) :: 
+    @spec new(string(), map(), non_neg_integer(), atom()) :: 
                 %GetRequest{
                     key: string(), 
                     metadata: map(),
-                    seqno: non_neg_integer()
+                    seq_no: non_neg_integer(),
+                    handoff: atom()
                 }
-    def new(key, metadata, seqno) do 
+    def new(key, metadata, seq_no, handoff) do 
         %GetRequest{
             key: key, 
             metadata: metadata, 
-            seqno: seqno
+            seq_no: seq_no,
+            handoff: handoff
         }
     end
 end
 
-# @TODO change the structure
 defmodule Dynamo.GetResponse do 
     alias __MODULE__
-    @enforce_keys [:key, :value, :metadata, :seqno]
+    @enforce_keys [:key, :value, :metadata, :seq_no]
     defstruct(
         key: nil, 
         value: nil,
         metadata: nil, 
-        seqno: nil
+        seq_no: nil
     )
 
     @spec new(string(), non_neg_integer(), map(), non_neg_integer()) :: 
@@ -110,28 +121,27 @@ defmodule Dynamo.GetResponse do
                     key: string(), 
                     value: non_neg_integer(),
                     metadata: map(),
-                    seqno: non_neg_integer()
+                    seq_no: non_neg_integer()
                 }
-    def new(key, value, metadata, seqno) do 
+    def new(key, value, metadata, seq_no) do 
         %GetResponse{
             key: key, 
             value: value,
             metadata: metadata, 
-            seqno: seqno
+            seq_no: seq_no
         }
     end
 end
 
-# @TODO change the structure
 defmodule Dynamo.PutResponse do 
     alias __MODULE__
-    @enforce_keys [:key, :value, :metadata, :status, :seqno]
+    @enforce_keys [:key, :value, :metadata, :status, :seq_no]
     defstruct(
         key: nil,
         value: nil,
         metadata: nil,
         status: nil,
-        seqno: nil
+        seq_no: nil
     )
 
     @spec new(string(), non_neg_integer(), map(), atom(), non_neg_integer()) :: 
@@ -140,15 +150,15 @@ defmodule Dynamo.PutResponse do
                     value: non_neg_integer(),
                     metadata: map(),
                     status: atom(),
-                    seqno: non_neg_integer()
+                    seq_no: non_neg_integer()
                 }
-    def new(key, value, metadata, status, seqno) do 
+    def new(key, value, metadata, status, seq_no) do 
         %PutResponse{
             key: key, 
             value: value,
             metadata: metadata, 
             status: status,
-            seqno: seqno
+            seq_no: seq_no
         }
     end
 end

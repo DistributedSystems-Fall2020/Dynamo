@@ -12,27 +12,35 @@ defmodule DynamoTest do
 
   test "Nothing crashes during startup" do 
     Emulation.init() 
-    base_config =  Dynamo.new_configuration(10, 3, 2, 2, [:b, :c])
+    base_config =  Dynamo.new_configuration(10, 3, 3, 3, [:b, :c, :d, :e, :f])
+    # base_config =  Dynamo.new_configuration(10, 3, 2, 2, [:b, :c, :d])
     # IO.puts("#{inspect(base_config)}")
-    spawn(:b, fn -> Dynamo.become_server(base_config) end)
-    spawn(:c, fn -> Dynamo.become_server(base_config) end)
+    b = spawn(:b, fn -> Dynamo.become_server(base_config) end)
+    c = spawn(:c, fn -> Dynamo.become_server(base_config) end)
+    d = spawn(:d, fn -> Dynamo.become_server(base_config) end)
+    e = spawn(:e, fn -> Dynamo.become_server(base_config) end)
+    f = spawn(:f, fn -> Dynamo.become_server(base_config) end)
     client = 
       spawn(:client, fn -> 
-        IO.puts("I'm here")
         client = Dynamo.Client.new_client(:b) 
         IO.puts("Client: #{inspect(client)}")
         Dynamo.Client.put(client, "key", %{}, 1, :b)
+        receive do
+          {sender, {:ok, key}} -> IO.puts("HEYEE")
+        end
       end)
     handle = Process.monitor(client)
     Process.sleep(5000)
-    client2 = 
-      spawn(:client2, fn -> 
-        IO.puts("I'm here")
+    client3 = 
+      spawn(:client3, fn -> 
         client = Dynamo.Client.new_client(:b) 
         IO.puts("Client: #{inspect(client)}")
         Dynamo.Client.get(client, "key", %{}, :b)
+        receive do
+          {sender, {key, responses}} -> IO.puts("We is good: #{inspect(responses)}")
+        end
       end)
-    handle = Process.monitor(client2)
+    handle = Process.monitor(client3)
 
     Process.sleep(5000)
   after
