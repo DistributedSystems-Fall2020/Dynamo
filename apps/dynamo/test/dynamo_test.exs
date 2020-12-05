@@ -12,7 +12,7 @@ defmodule DynamoTest do
 
   test "Nothing crashes during startup" do 
     Emulation.init() 
-    base_config =  Dynamo.new_configuration(10, 3, 3, 3, [:b, :c, :d, :e, :f])
+    base_config =  Dynamo.new_configuration(10, 1, 6, 6, [:b, :c, :d, :e, :f])
     # base_config =  Dynamo.new_configuration(10, 3, 2, 2, [:b, :c, :d])
     # IO.puts("#{inspect(base_config)}")
     b = spawn(:b, fn -> Dynamo.become_server(base_config) end)
@@ -22,7 +22,7 @@ defmodule DynamoTest do
     f = spawn(:f, fn -> Dynamo.become_server(base_config) end)
     client = 
       spawn(:client, fn -> 
-        client = Dynamo.Client.new_client(:b) 
+        client = Dynamo.Client.new_client([:b, :c, :d, :e, :f]) 
         IO.puts("Client: #{inspect(client)}")
         Dynamo.Client.put(client, "key", %{}, 1, :b)
         receive do
@@ -33,7 +33,7 @@ defmodule DynamoTest do
     Process.sleep(5000)
     client3 = 
       spawn(:client3, fn -> 
-        client = Dynamo.Client.new_client(:b) 
+        client = Dynamo.Client.new_client([:b, :c, :d, :e, :f]) 
         IO.puts("Client: #{inspect(client)}")
         Dynamo.Client.get(client, "key", %{}, :b)
         receive do
@@ -41,7 +41,6 @@ defmodule DynamoTest do
         end
       end)
     handle = Process.monitor(client3)
-
     Process.sleep(5000)
   after
     Emulation.terminate()
