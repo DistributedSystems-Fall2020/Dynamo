@@ -32,6 +32,7 @@ defmodule Dynamo do
     pending_get_req: nil,
     pending_get_rsp: nil, 
     pending_get_msg: nil,
+    pending_handoffs: nil, 
     failed_nodes: nil, 
     seed_node: nil, 
     node_list: nil, 
@@ -75,7 +76,7 @@ defmodule Dynamo do
         get_preference_helper(curr_count, curr_index, preference_list, node_set ,count, initial_index, node_list, avoid, avoided,false)
       else 
         avoided = if MapSet.member?(avoid, Enum.at(node_list, curr_index)) do MapSet.put(avoided, Enum.at(node_list, curr_index) ) else avoided end
-        # IO.puts("AVOIDED #{inspect(Enum.at(node_list, curr_index))} #{inspect(avoid)} #{inspect(MapSet.member?(avoid, :b))}")
+        # # IO.puts("AVOIDED #{inspect(Enum.at(node_list, curr_index))} #{inspect(avoid)} #{inspect(MapSet.member?(avoid, :b))}")
         
         curr_index = if curr_index == length(node_list) - 1 do 0 else curr_index + 1 end
         get_preference_helper(curr_count, curr_index, preference_list, node_set ,count, initial_index, node_list, avoid, avoided ,false)
@@ -92,7 +93,7 @@ defmodule Dynamo do
     hash_list = Enum.map(nodeList, fn [hash| _] -> hash end)
     node_list = Enum.map(nodeList, fn [_| node] -> node end)
     node_list = List.flatten(node_list)
-    # IO.puts("nodelist #{inspect(node_list)}")
+    # # IO.puts("nodelist #{inspect(node_list)}")
     initial_node = Bisect.bisect_left(hash_list, Utils.hash(key))
    
     get_preference_helper(0, initial_node, [], MapSet.new() ,count, initial_node, node_list, failed_nodes, MapSet.new(), true )
@@ -117,6 +118,7 @@ defmodule Dynamo do
     state = %{state |  local_store: %{}, pending_put_req: %{}, pending_put_rsp: %{}, pending_put_msg: %{},
       pending_get_req: %{}, pending_get_rsp: %{}, pending_get_msg: %{}, failed_nodes: MapSet.new()}
     state = add_nodes_to_ring(state, 0)
+    timer = Emulation.timer(100, :retry)
     server(state, nil)
   end
 
@@ -129,12 +131,12 @@ defmodule Dynamo do
         send(head, msg)
         cond do
         Map.has_key?(state.pending_get_req, seq_no) ->
-          IO.puts("Calling GET Send #{inspect(me)} #{inspect(seq_no)}")
+          # IO.puts("Calling GET Send #{inspect(me)} #{inspect(seq_no)}")
           {:ok, pending_get_req_seq_no} = Map.fetch(state.pending_get_req, seq_no)
           pending_get_req_seq_no = MapSet.put(pending_get_req_seq_no, head)
           pending_get_req = Map.put(state.pending_get_req, seq_no, pending_get_req_seq_no)
           timer = Emulation.timer(50, {:timer, me, head, seq_no})
-          IO.puts("Inserting timer for GET #{inspect(me)} #{inspect(head)} #{inspect(seq_no)} #{inspect(timer)}")
+          # IO.puts("Inserting timer for GET #{inspect(me)} #{inspect(head)} #{inspect(seq_no)} #{inspect(timer)}")
           msg_timers = Map.put(state.msg_timers, {:timer, me, head, seq_no}, timer)
           state = %{state | msg_timers: msg_timers, pending_get_req: pending_get_req}
           if tail != [] do
@@ -148,12 +150,12 @@ defmodule Dynamo do
             state
           end
         Map.has_key?(state.pending_put_req, seq_no) ->
-          IO.puts("Calling PUT Send #{inspect(me)} #{inspect(seq_no)}")
+          # IO.puts("Calling PUT Send #{inspect(me)} #{inspect(seq_no)}")
           {:ok, pending_put_req_seq_no} = Map.fetch(state.pending_put_req, seq_no)
           pending_put_req_seq_no = MapSet.put(pending_put_req_seq_no, head)
           pending_put_req = Map.put(state.pending_put_req, seq_no, pending_put_req_seq_no)
           timer = Emulation.timer(50, {:timer, me, head, seq_no})
-          IO.puts("Inserting timer for PUT #{inspect(me)} #{inspect(head)} #{inspect(seq_no)} #{inspect(timer)}")
+          # IO.puts("Inserting timer for PUT #{inspect(me)} #{inspect(head)} #{inspect(seq_no)} #{inspect(timer)}")
           msg_timers = Map.put(state.msg_timers, {:timer, me, head, seq_no}, timer)
           state = %{state | msg_timers: msg_timers, pending_put_req: pending_put_req}
           if tail != [] do
@@ -166,7 +168,7 @@ defmodule Dynamo do
             # state = %{state | pending_put_req: pending_put_req}
             state
           end
-        true -> IO.puts("Calling nobody")
+        true -> # IO.puts("Calling nobody")
         end
       else
         send_to_all_members(tail, state, seq_no, msg)
@@ -188,7 +190,7 @@ defmodule Dynamo do
         else
           send(head, msg)
           timer = Emulation.timer(10, {:timer, me, head, seq_no})
-          IO.puts("Inserting timer for #{inspect(me)} #{inspect(head)} #{inspect(seq_no)} #{inspect(timer)}")
+          # IO.puts("Inserting timer for #{inspect(me)} #{inspect(head)} #{inspect(seq_no)} #{inspect(timer)}")
           msg_timers = Map.put(state.msg_timers, {:timer, me, head, seq_no}, timer)
           state = %{state | msg_timers: msg_timers}
           msg_seq = MapSet.put(msg_seq, head)
@@ -224,6 +226,34 @@ defmodule Dynamo do
     end
   end
 
+
+
+
+  defp update_msg_helper(curr, handoff, msg, pending_handoffs) do 
+    if curr == length(handoff) do 
+      pending_handoffs
+    else
+      if Map.member?(pending_handoffs, Enum.at(handoff, curr)) do 
+        val = Map.get(pending_handoffs, Enum.at(handoff, curr))
+        val = val ++ [msg]
+        pending_handoffs = Map.put(pending_handoffs, Enum.at(handoff, curr), val)
+        update_msg_helper(curr+1, handoff, msg, pending_handoffs)
+      else 
+        pending_handoffs = Map.put(pending_handoffs, Enum.at(handoff, curr), [msg])
+        update_msg_helper(curr+1, handoff, msg, pending_handoffs)
+      end
+    end
+  end
+  defp update_msg(handoff, msg, pending_handoffs) do
+    if pending_handoffs == nil do 
+      %{} 
+    else 
+      handoff = MapSet.to_list(handoff)
+      update_msg_helper(0, handoff, msg, pending_handoffs)
+    end
+  end
+
+
   def server(state, extra_state) do 
     me = whoami()
     receive do
@@ -240,7 +270,7 @@ defmodule Dynamo do
             metadata: metadata, 
             client: client
           })
-          server(state, nil)
+          server(state, extra_state)
         end 
 
         seq_no = get_next_seq_no(state)
@@ -258,21 +288,28 @@ defmodule Dynamo do
         pending_get_req = Map.put(state.pending_get_req, seq_no, pending_get_req_seq_no)
         state = %{state | pending_get_req: pending_get_req}
 
-        IO.puts("Who got the GET request? #{inspect(me)} #{inspect(state.pending_get_req)}")
+        # IO.puts("Who got the GET request? #{inspect(me)} #{inspect(state.pending_get_req)}")
 
-        # IO.puts("The preference list is #{inspect(preference_list)}")
-        IO.puts("get message works: #{inspect(whoami())}")  
-        {value, metadata} = retrieve(state, key)
-        pending_get_rsp = Map.put(state.pending_get_rsp, seq_no, MapSet.new([{me, value, metadata}]))
+        # # IO.puts("The preference list is #{inspect(preference_list)}")
+        # IO.puts("get message works: #{inspect(whoami())}")  
+
         pending_get_msg = Map.put(state.pending_get_msg, seq_no, %Dynamo.Client.GetMessage{
           key: key,
           metadata: metadata, 
           client: client
         })
-        # IO.puts("Pending get: #{inspect(pending_get_rsp)}")
-        state = %{state | pending_get_rsp: pending_get_rsp, pending_get_msg: pending_get_msg}
-        # IO.puts("Retrieved the message #{inspect(msg)}")     
-        server(state, nil)
+        # # IO.puts("Pending get: #{inspect(pending_get_rsp)}")
+        state = %{state | pending_get_msg: pending_get_msg}
+        {value, metadata} = retrieve(state, key)
+        if {value, metadata} == {nil,nil} do
+          pending_get_rsp = Map.put(state.pending_get_rsp, seq_no, MapSet.new())
+          state = %{state | pending_get_rsp: pending_get_rsp}
+          server(state, extra_state)
+        end
+        pending_get_rsp = Map.put(state.pending_get_rsp, seq_no, MapSet.new([{me, value, metadata}]))
+        state = %{state | pending_get_rsp: pending_get_rsp}
+        # # IO.puts("Retrieved the message #{inspect(msg)}")     
+        server(state, extra_state)
 
       {sender,  %Dynamo.Client.PutMessage{
             key: key,
@@ -288,7 +325,7 @@ defmodule Dynamo do
             metadata: metadata, 
             client: client
           })
-          server(state, nil)
+          server(state, extra_state)
         end 
 
         seq_no = get_next_seq_no(state)
@@ -308,9 +345,9 @@ defmodule Dynamo do
         pending_put_req = Map.put(state.pending_put_req, seq_no, pending_put_req_seq_no)
         state = %{state | pending_put_req: pending_put_req}
 
-        IO.puts("Who got the PUT request? #{inspect(state.pending_put_req)}")
+        # IO.puts("Who got the PUT request? #{inspect(state.pending_put_req)}")
 
-        IO.puts("put message works #{inspect(whoami())}")
+        # IO.puts("put message works #{inspect(whoami())}")
         state = store(state, key, value, metadata)
         pending_put_rsp = Map.put(state.pending_put_rsp, seq_no, MapSet.new([me]))
         pending_put_msg = Map.put(state.pending_put_msg, seq_no, %Dynamo.Client.PutMessage{
@@ -320,7 +357,7 @@ defmodule Dynamo do
           client: client
         })
         state = %{state | pending_put_rsp: pending_put_rsp, pending_put_msg: pending_put_msg}
-        server(state, nil)
+        server(state, extra_state)
 
       {sender,  %Dynamo.GetRequest{
           key: key,
@@ -329,18 +366,21 @@ defmodule Dynamo do
           handoff: handoff
         }} -> 
         me = whoami()
-        if me == :c do
-          server(state, nil)
-        end
-        IO.puts("Server received get request")
+        # if me == :c do
+        #   server(state, nil)
+        # end
+        # IO.puts("Server received get request")
         {value, metadata} = retrieve(state, key)
+        if {value, metadata} == {nil, nil} do
+          server(state, extra_state)
+        end
         send(sender, %Dynamo.GetResponse{
           key: key,
           value: value,
           metadata: metadata, 
           seq_no: seq_no
         })
-        server(state, nil)
+        server(state, extra_state)
 
       {sender,  %Dynamo.PutRequest{
           key: key,
@@ -350,14 +390,26 @@ defmodule Dynamo do
           handoff: handoff
         }} -> 
         me = whoami()
-        if me == :c do
-          server(state, nil)
-        end
-        IO.puts("Server received put request: #{inspect(me)}")
+        # if me == :c do
+        #   server(state, nil)
+        # end
+        # IO.puts("Server received put request: #{inspect(me)}")
         state = store(state, key, value, metadata)
-        if handoff != nil do
-          IO.puts("I got a handoff: #{inspect(me)} #{inspect(handoff)}")
-        end
+        msg = %Dynamo.PutRequest{
+          key: key,
+          value: value,
+          metadata: metadata, 
+          seq_no: seq_no,
+          handoff: nil
+        }
+        pending_handoffs = state.pending_handoffs
+        pending_handoffs = if handoff != nil do update_msg(handoff, msg, pending_handoffs) else pending_handoffs end
+        # if handoff != nil do
+        #   handoff = MapSet.to_list(handoff)
+        #   #update pending handoffs 
+        #   # Enum
+        #   # IO.puts("I got a handoff: #{inspect(me)} #{inspect(handoff)}")
+        # end
         send(sender, %Dynamo.PutResponse{
           key: key,
           value: value,
@@ -365,7 +417,7 @@ defmodule Dynamo do
           status: :ok,
           seq_no: seq_no
         })
-        server(state, nil)
+        server(%{state| pending_handoffs: pending_handoffs}, extra_state)
 
       {sender,  %Dynamo.GetResponse{
           key: key,
@@ -373,29 +425,32 @@ defmodule Dynamo do
           metadata: metadata, 
           seq_no: seq_no
         }} -> 
-        IO.puts("Server received get response")
+        # IO.puts("Server received get response")
         if Map.has_key?(state.msg_timers, {:timer, me, sender, seq_no}) do
           {:ok, timer} = Map.fetch(state.msg_timers, {:timer, me, sender, seq_no})
           k = Emulation.cancel_timer(timer)
           msg_timers = Map.delete(state.msg_timers, {:timer, me, sender, seq_no})
           state = %{state | msg_timers: msg_timers}
           if value == nil do 
-            server(state, nil)
+            server(state, extra_state)
           end
           {:ok, mpset_seq_no} = Map.fetch(state.pending_get_rsp, seq_no)
           mpset_seq_no = MapSet.put(mpset_seq_no, {sender, value, metadata})
           state = %{state | pending_get_rsp: Map.put(state.pending_get_rsp, seq_no, mpset_seq_no)}
+          
           {is_enough, responses} = check_get_satisfied(MapSet.to_list(state.pending_get_rsp[seq_no]), state.num_writes, [])
+          # IO.puts("What did we get: #{inspect(is_enough)} #{inspect(responses)}")
           if is_enough do 
             #coalesce of clocks
             result = Dynamo.VectorClock.coalesce2(responses)
+            # IO.puts("RESP - #{inspect(responses)}")
             {:ok, msg} = Map.fetch(state.pending_get_msg, seq_no)
-            send(msg.client, {key, result})
-            server(state, nil)
+            send(msg.client, {key, responses})
+            server(state, extra_state)
           end
-          server(state, nil)
+          server(state, extra_state)
         end
-        server(state, nil)
+        server(state, extra_state)
 
       {sender,  %Dynamo.PutResponse{
           key: key,
@@ -404,11 +459,11 @@ defmodule Dynamo do
           status: status,
           seq_no: seq_no
         }} -> 
-        IO.puts("Server received put response #{inspect(whoami())} #{inspect(sender)}")
+        # IO.puts("Server received put response #{inspect(whoami())} #{inspect(sender)}")
         if Map.has_key?(state.msg_timers, {:timer, me, sender, seq_no}) do
           {:ok, timer} = Map.fetch(state.msg_timers, {:timer, me, sender, seq_no})
           k = Emulation.cancel_timer(timer)
-          IO.puts("PUT timer cancelled: #{inspect(me)} #{inspect(sender)} #{inspect(k)}")
+          # IO.puts("PUT timer cancelled: #{inspect(me)} #{inspect(sender)} #{inspect(k)}")
           msg_timers = Map.delete(state.msg_timers, {:timer, me, sender, seq_no})
           state = %{state | msg_timers: msg_timers}
           if status == :ok do
@@ -418,23 +473,27 @@ defmodule Dynamo do
             if MapSet.size(state.pending_put_rsp[seq_no]) >= state.num_reads do 
               {:ok, msg} = Map.fetch(state.pending_put_msg, seq_no)
               send(msg.client, {:ok, key})
-              server(state, nil)
+              server(state, extra_state)
             end
-            server(state, nil)
+            server(state, extra_state)
           end
-          server(state, nil)
+          server(state, extra_state)
         end
-        server(state, nil)
+        server(state, extra_state)
 
       {:timer, me, sender, seq_no} -> 
-        IO.puts("timer went off: #{inspect(me)} #{inspect(sender)} #{inspect(seq_no)}")
-        {:ok, timer} = Map.fetch(state.msg_timers, {:timer, me, sender, seq_no})
+        # IO.puts("timer went off: #{inspect(me)} #{inspect(sender)} #{inspect(seq_no)}")
+        status = Map.fetch(state.msg_timers, {:timer, me, sender, seq_no})
+        if status == :error do 
+          server(state, extra_state)
+        end
+        {:ok, timer} = status
         Emulation.cancel_timer(timer)
         msg_timers = Map.delete(state.msg_timers, {:timer, me, sender, seq_no})
         state = %{state | msg_timers: msg_timers}
         cond do
           Map.has_key?(state.pending_put_msg, seq_no) -> 
-            IO.puts("Timer for PUT seq_no: #{inspect(seq_no)}")
+            # IO.puts("Timer for PUT seq_no: #{inspect(seq_no)}")
             failed_nodes = MapSet.put(state.failed_nodes, sender)
             state = %{state | failed_nodes: failed_nodes}
             {:ok, put_msg} = Map.fetch(state.pending_put_msg, seq_no)
@@ -445,16 +504,16 @@ defmodule Dynamo do
               value: put_msg.value,
               metadata: put_msg.metadata, 
               seq_no: seq_no,
-              handoff: sender
+              handoff: avoided
             }
             {status, state, pending_put_req} = send_to_first_members(preference_list, state, state.pending_put_req, seq_no, send_msg)
             state = %{state | pending_put_req: pending_put_req}
-            IO.puts("Preference list after PUT timer: #{inspect(preference_list)} #{inspect(state.pending_put_req)}")
-            server(state, nil)
+            # IO.puts("Preference list after PUT timer: #{inspect(preference_list)} #{inspect(state.pending_put_req)}")
+            server(state, extra_state)
 
           Map.has_key?(state.pending_get_msg, seq_no) -> 
-            IO.puts("Timer for GET seq_no: #{inspect(seq_no)}")
-            IO.puts("GET SENT before timer #{inspect(state.pending_get_req)}")
+            # IO.puts("Timer for GET seq_no: #{inspect(seq_no)}")
+            # IO.puts("GET SENT before timer #{inspect(state.pending_get_req)}")
             failed_nodes = MapSet.put(state.failed_nodes, sender)
             {:ok, get_msg} = Map.fetch(state.pending_get_msg, seq_no)
             {preference_list, avoided} =  get_preference_list(state.ring, get_msg.key, state.num_replicas, state.failed_nodes)
@@ -462,18 +521,47 @@ defmodule Dynamo do
               key: get_msg.key, 
               metadata: get_msg.metadata, 
               seq_no: seq_no,
-              handoff: sender
+              handoff: avoided
             }
             {status, state, pending_get_req} = send_to_first_members(preference_list, state, state.pending_get_req, seq_no, send_msg)
             state = %{state | pending_get_req: pending_get_req}
-            IO.puts("Preference list after GET timer: #{inspect(preference_list)} #{inspect(state.pending_get_req)}")
-            server(state, nil)
-          true -> IO.puts("Timer for empty")
-            server(state, nil)
+            # IO.puts("Preference list after GET timer: #{inspect(preference_list)} #{inspect(state.pending_get_req)}")
+            server(state, extra_state)
+          true -> # IO.puts("Timer for empty")
+            server(state, extra_state)
         end
 
 
-        server(state, nil)
+        server(state, extra_state)
+
+      {sender, :ping} -> 
+        #send a ping resp 
+        send(sender, :pingresp)
+        server(state, extra_state)
+
+      {sender, :pingresp} ->
+        IO.puts("Hinted handoff")
+        #things to fix, have a pending handoffs map
+        #for handoff sent avoided instead 
+        # @TODO check if the sender is in failed nodes, remove 
+        # check if sending in pending handoffs, send and then remove
+        failed_nodes = MapSet.delete(state.failed_nodes, sender)
+        list_of_pending = Map.get(state.pending_handoffs, sender)
+        if list_of_pending != nil do 
+          Enum.each(list_of_pending, fn msg-> 
+            send(sender, msg)
+          end)
+        end 
+        pending = if list_of_pending == nil do state.pending_handoffs else Map.delete(state.pending_handoffs, sender) end
+        server(%{state| failed_nodes: failed_nodes}, extra_state)
+
+      :retry  -> 
+        #Send a ping to all failed nodes 
+        failed_nodes = MapSet.to_list(state.failed_nodes)
+        Enum.each(failed_nodes, fn x -> send(x, :ping) end)
+        server(state, extra_state)
+      
+
 
     end
     
@@ -482,8 +570,8 @@ defmodule Dynamo do
 
 
   defp print_st(state) do 
-    IO.puts("----- Printing state ----")
-    IO.puts("#{inspect(state)}")
+    # IO.puts("----- Printing state ----")
+    # IO.puts("#{inspect(state)}")
   end 
   
   defp store(state, key, value, metadata) do
@@ -506,7 +594,7 @@ defmodule Dynamo do
     state = new_configuration(10,3,2,2, [:b, :c])
     state = add_nodes_to_ring(state, 0)
 
-    IO.puts("Testing store: #{inspect(state.ring)}")
+    # IO.puts("Testing store: #{inspect(state.ring)}")
   end
 
   @spec test_store() :: no_return()
@@ -517,7 +605,7 @@ defmodule Dynamo do
     state = new_configuration(10,3,2,2, [:b, :c])
     state = %{state | local_store: %{}}
     state = store(state, key, value, metadata)
-    IO.puts("Testing store: #{inspect(state)}")
+    # IO.puts("Testing store: #{inspect(state)}")
   end
 
   @spec test_retrieve() :: no_return()
@@ -529,7 +617,7 @@ defmodule Dynamo do
     state = %{state | local_store: %{}}
     state = store(state, key, value, metadata)
     value = retrieve(state, key) 
-    IO.puts("Testing retrieve: #{inspect(value)}")
+    # IO.puts("Testing retrieve: #{inspect(value)}")
   end
 end
 
@@ -544,7 +632,7 @@ defmodule Dynamo.Client do
   defstruct(node_list: nil, test_client: nil, local_store: nil)
     @spec new_client(atom()) :: %Dynamo.Client{node_list: atom()}
   def new_client(node_list) do
-    IO.puts("CREATING A CLIENT")
+    # # IO.puts("CREATING A CLIENT")
     %Dynamo.Client{node_list: node_list,
             test_client: nil, 
             local_store: %{}
@@ -560,12 +648,15 @@ defmodule Dynamo.Client do
         metadata: metadata, 
         node_list: node_list
       }} -> 
+        # IO.puts("Client put")
         me = whoami()
         node_list = if node_list == nil do state.node_list else node_list end
     
         server =  Enum.random(node_list)
-        metadata = Map.get(state.local_store, key, %{})
-        metadata = if map_size(metadata) == 0  do %Dynamo.VectorClock{} else Dynamo.VectorClock.converge(metadata) end
+        metadata = Map.get(state.local_store, key, [])
+        metadata = if length(metadata) == 0  do %Dynamo.VectorClock{} else Dynamo.VectorClock.converge(metadata) end
+        
+        IO.puts("Converged - #{inspect(metadata)}")
         send(server, %Dynamo.Client.PutMessage{
                         key: key,
                         metadata: metadata,
@@ -573,12 +664,14 @@ defmodule Dynamo.Client do
                         client: me
                       })
 
+        # IO.puts("Client put 2")
         client(%{state| test_client: sender})
       {sender, %Dynamo.ToClientGetMessage{
         key: key, 
         metadata: metadata, 
         node_list: node_list
       }} ->
+        # IO.puts("Client get")
         me = whoami()
         node_list = if node_list == nil do state.node_list else node_list end
         server =  Enum.random(node_list)
@@ -587,20 +680,25 @@ defmodule Dynamo.Client do
                         key: key,
                         metadata: metadata,
                         client: me
-                      }
-                    )
+                      })
+        
         client(%{state| test_client: sender})
+
+      {sender, {:ok, key}} -> 
+        # IO.puts("Got response")
+        send(state.test_client, {:put, :ok, key})
+        client(state)
       
       {sender, {key, responses}} -> 
+        # IO.puts("CLOCK_LIST GEN - #{inspect(state.test_client)}")
         send(state.test_client, {:get, key, responses})
         local_store = state.local_store
         clock_list = Enum.map(responses, fn {a, b} -> b end)
+        # IO.puts("CLOCK_LIST GEN - #{inspect(key)}")
         local_store = Map.put(local_store, key, clock_list)
         client(%{state| local_store: local_store})
 
-      {sender, {:ok, key}} -> 
-        send(state.test_client, {:put, :ok, key})
-        client(state)
+
     end 
   end
 end 

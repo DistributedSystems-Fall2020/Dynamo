@@ -8,11 +8,11 @@ defmodule Dynamo.Client.PutMessage do
         client: nil
     )
 
-    @spec new(string(), non_neg_integer(), map(), atom()) :: 
+    @spec new(string(), non_neg_integer(), any(), atom()) :: 
                 %PutMessage{
                     key: string(), 
                     value: non_neg_integer(), 
-                    metadata: map(), 
+                    metadata: any(), 
                     client: atom()
                 }
     def new(key, value, metadata, client) do 
@@ -34,10 +34,10 @@ defmodule Dynamo.Client.GetMessage do
         client: nil
     )
 
-    @spec new(string(), map(), atom()) :: 
+    @spec new(string(), any(), atom()) :: 
                 %GetMessage{
                     key: string(), 
-                    metadata: map(),
+                    metadata: any(),
                     client: atom()
                 }
     def new(key, metadata, client) do 
@@ -60,11 +60,11 @@ defmodule Dynamo.PutRequest do
         handoff: nil
     )
 
-    @spec new(string(), non_neg_integer(), map(), non_neg_integer(), atom()) :: 
+    @spec new(string(), non_neg_integer(), any(), non_neg_integer(), atom()) :: 
                 %PutRequest{
                     key: string(), 
                     value: non_neg_integer(), 
-                    metadata: map(), 
+                    metadata: any(), 
                     seq_no: non_neg_integer(),
                     handoff: atom()
                 }
@@ -89,10 +89,10 @@ defmodule Dynamo.GetRequest do
         handoff: nil
     )
 
-    @spec new(string(), map(), non_neg_integer(), atom()) :: 
+    @spec new(string(), any(), non_neg_integer(), atom()) :: 
                 %GetRequest{
                     key: string(), 
-                    metadata: map(),
+                    metadata: any(),
                     seq_no: non_neg_integer(),
                     handoff: atom()
                 }
@@ -116,11 +116,11 @@ defmodule Dynamo.GetResponse do
         seq_no: nil
     )
 
-    @spec new(string(), non_neg_integer(), map(), non_neg_integer()) :: 
+    @spec new(string(), non_neg_integer(), any(), non_neg_integer()) :: 
                 %GetResponse{
                     key: string(), 
                     value: non_neg_integer(),
-                    metadata: map(),
+                    metadata: any(),
                     seq_no: non_neg_integer()
                 }
     def new(key, value, metadata, seq_no) do 
@@ -144,11 +144,11 @@ defmodule Dynamo.PutResponse do
         seq_no: nil
     )
 
-    @spec new(string(), non_neg_integer(), map(), atom(), non_neg_integer()) :: 
+    @spec new(string(), non_neg_integer(), any(), atom(), non_neg_integer()) :: 
                 %PutResponse{
                     key: string(), 
                     value: non_neg_integer(),
-                    metadata: map(),
+                    metadata: any(),
                     status: atom(),
                     seq_no: non_neg_integer()
                 }
@@ -173,11 +173,11 @@ defmodule Dynamo.ToClientPutMessage do
         node_list: nil
     )
 
-    @spec new(string(), non_neg_integer(), map(), list()) :: 
+    @spec new(string(), non_neg_integer(), any(), list()) :: 
                 %ToClientPutMessage{
                     key: string(), 
                     value: non_neg_integer(), 
-                    metadata: map(), 
+                    metadata: any(), 
                     node_list: list()
                 }
     def new(key, value, metadata, node_list) do 
@@ -211,10 +211,10 @@ defmodule Dynamo.ToClientGetMessage do
         node_list: nil
     )
 
-    @spec new(string(), map(), list()) :: 
+    @spec new(string(), any(), list()) :: 
                 %ToClientGetMessage{
                     key: string(), 
-                    metadata: map(), 
+                    metadata: any(), 
                     node_list: list()
                 }
     def new(key, metadata, node_list) do 
