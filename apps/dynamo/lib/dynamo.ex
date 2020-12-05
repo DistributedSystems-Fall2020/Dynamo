@@ -564,7 +564,7 @@ defmodule Dynamo.Client do
         node_list = if node_list == nil do state.node_list else node_list end
     
         server =  Enum.random(node_list)
-    
+        metadata = Map.get(state.local_store, key, %{})
         metadata = if map_size(metadata) == 0  do %Dynamo.VectorClock{} else Dynamo.VectorClock.converge(metadata) end
         send(server, %Dynamo.Client.PutMessage{
                         key: key,
@@ -582,7 +582,7 @@ defmodule Dynamo.Client do
         me = whoami()
         node_list = if node_list == nil do state.node_list else node_list end
         server =  Enum.random(node_list)
-        metadata = Map.get(state.local_store, key, %{})
+
         send(server, %Dynamo.Client.GetMessage{
                         key: key,
                         metadata: metadata,
@@ -594,7 +594,8 @@ defmodule Dynamo.Client do
       {sender, {key, responses}} -> 
         send(state.test_client, {:get, key, responses})
         local_store = state.local_store
-        local_store = Map.put(local_store, key, responses)
+        clock_list = Enum.map(responses, fn {a, b} -> b end)
+        local_store = Map.put(local_store, key, clock_list)
         client(%{state| local_store: local_store})
 
       {sender, {:ok, key}} -> 
