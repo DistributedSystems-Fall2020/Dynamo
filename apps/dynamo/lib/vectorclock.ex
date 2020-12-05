@@ -90,7 +90,6 @@ defmodule Dynamo.VectorClock do
     greater_than(vector_clock_1, vector_clock_2) or equal_to(vector_clock_1, vector_clock_2)
   end
 
-
   @spec merge_with_res(non_neg_integer(), %Dynamo.VectorClock{}, list()) :: any()
   def merge_with_res(curr_index, clock, result) do 
     if curr_index == length(result) do 
@@ -129,7 +128,7 @@ defmodule Dynamo.VectorClock do
     max(c1, c2)
   end 
 
-    
+  @spec combine_vector_clocks(%Dynamo.VectorClock{}, %Dynamo.VectorClock{}) :: %Dynamo.VectorClock{}
   def combine_vector_clocks(vector_clock_1, vector_clock_2) do
     clock_1 = vector_clock_1.clock
     clock_2 = vector_clock_2.clock
@@ -137,7 +136,7 @@ defmodule Dynamo.VectorClock do
     %Dynamo.VectorClock{clock: clock}
   end
 
-  def converge_helper(curr_index, vector_clock_list, result) do 
+  defp converge_helper(curr_index, vector_clock_list, result) do 
     if curr_index == length(vector_clock_list) do
         result 
     else
@@ -145,17 +144,63 @@ defmodule Dynamo.VectorClock do
         converge_helper(curr_index + 1, vector_clock_list, result)
     end
   end 
-
+  @spec converge(list()) :: %Dynamo.VectorClock{}
   def converge(vector_clock_list) do 
     converge_helper(0, vector_clock_list, %Dynamo.VectorClock{})
   end
 
+  @spec merge_with_res2(non_neg_integer(), tuple(), list()) :: any()
+  def merge_with_res2(curr_index, clock, result) do 
+    if curr_index == length(result) do 
+        {result, false}
+    else 
+        cond do 
+            less_than_equal_to(elem(clock,1) , elem(Enum.at(result, curr_index),1)) ->
+                {result, true}
+            less_than(elem(Enum.at(result, curr_index),1), elem(clock,1)) -> 
+                result = List.update_at(result, curr_index, fn _ -> clock end)
+                {result, true}
+            true -> 
+                merge_with_res2(curr_index+1, clock, result)
+            end
+    end
+  end
 
-  
+  @spec coalesce2_helper(non_neg_integer(), list(), list()) :: list()
+  defp coalesce2_helper(curr_index, vector_clock_value_list, result) do
+    if curr_index == length(vector_clock_value_list) do 
+        result
+    else
+        {result, succ} = merge_with_res2(0, Enum.at(vector_clock_value_list, curr_index), result)
+        result = if succ do result else result ++ [Enum.at(vector_clock_value_list, curr_index)] end
+        coalesce2_helper(curr_index+1, vector_clock_value_list, result )
+    end
+  end 
+
+
+  @spec coalesce2(list()) :: list() 
+  def coalesce2(vector_clock_value_list) do 
+    coalesce2_helper(0,vector_clock_value_list,[])
+  end 
 
   ###---------------- Test functions --------------###
 
+  @spec test_coalesce2() :: no_return() 
+  def test_coalesce2() do 
+    vc1 = %Dynamo.VectorClock{}
+    vc2 = %Dynamo.VectorClock{}
+    vc3 = %Dynamo.VectorClock{}
 
+    vc1 = Dynamo.VectorClock.update_vector_clock(vc1, :a, 1)
+    vc1 = Dynamo.VectorClock.update_vector_clock(vc1, :b, 2)
+    vc2 = Dynamo.VectorClock.update_vector_clock(vc2, :b, 3)
+    vc2 = Dynamo.VectorClock.update_vector_clock(vc2, :a, 2)
+    vc3 = Dynamo.VectorClock.update_vector_clock(vc3, :x, 1)
+    vc3 = Dynamo.VectorClock.update_vector_clock(vc3, :y, 2)
+    list_clocks = [{1,vc1}] ++ [{2,vc2}] ++ [{3,vc3}]
+    diverged_clocks = coalesce2(list_clocks)
+    IO.puts("res for coalesce2 - #{inspect(diverged_clocks)}")
+  end
 
   @spec test_coalesce_and_converge() :: no_return()
   def test_coalesce_and_converge() do 
