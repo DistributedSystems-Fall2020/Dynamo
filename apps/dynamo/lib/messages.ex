@@ -163,3 +163,79 @@ defmodule Dynamo.PutResponse do
     end
 end
 
+defmodule Dynamo.ToClientPutMessage do 
+    alias __MODULE__
+    @enforce_keys [:key, :value, :metadata]
+    defstruct(
+        key: nil, 
+        value: nil,
+        metadata: nil, 
+        node_list: nil
+    )
+
+    @spec new(string(), non_neg_integer(), map(), list()) :: 
+                %ToClientPutMessage{
+                    key: string(), 
+                    value: non_neg_integer(), 
+                    metadata: map(), 
+                    node_list: list()
+                }
+    def new(key, value, metadata, node_list) do 
+        %ToClientPutMessage{
+            key: key, 
+            value: value, 
+            metadata: metadata, 
+            node_list: node_list
+        }
+    end
+
+    @spec test_struct_ToClientPutMessage() :: no_return()
+    def test_struct_ToClientPutMessage() do 
+        k = %Dynamo.ToClientPutMessage{
+            key: "key",
+            metadata: %{},
+            value: 1, 
+            node_list: [:a, :b, :c]
+          }
+        IO.puts("Checking struct #{inspect(k)}")
+    end 
+end
+
+
+defmodule Dynamo.ToClientGetMessage do 
+    alias __MODULE__
+    @enforce_keys [:key, :metadata]
+    defstruct(
+        key: nil, 
+        metadata: nil, 
+        node_list: nil
+    )
+
+    @spec new(string(), map(), list()) :: 
+                %ToClientGetMessage{
+                    key: string(), 
+                    metadata: map(), 
+                    node_list: list()
+                }
+    def new(key, metadata, node_list) do 
+        %ToClientGetMessage{
+            key: key, 
+            metadata: metadata, 
+            node_list: node_list
+        }
+    end
+
+    @spec test_struct_ToClientGetMessage() :: no_return()
+    def test_struct_ToClientGetMessage() do 
+        k = %Dynamo.ToClientGetMessage{
+            key: "key",
+            metadata: %{}, 
+            node_list: [:a, :b, :c]
+          }
+        IO.puts("Checking struct #{inspect(k)}")
+    end 
+
+end
+
+
+

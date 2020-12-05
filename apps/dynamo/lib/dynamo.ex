@@ -292,6 +292,7 @@ defmodule Dynamo do
         end 
 
         seq_no = get_next_seq_no(state)
+        metadata = Dynamo.VectorClock.update_vector_clock(metadata, whoami(), seq_no) 
         pending_put_req = Map.put(state.pending_put_req, seq_no, MapSet.new())
         state = %{state | seq_no: seq_no, pending_put_req: pending_put_req}
         state = send_to_all_members(preference_list, state, seq_no, %Dynamo.PutRequest{
@@ -386,8 +387,10 @@ defmodule Dynamo do
           state = %{state | pending_get_rsp: Map.put(state.pending_get_rsp, seq_no, mpset_seq_no)}
           {is_enough, responses} = check_get_satisfied(MapSet.to_list(state.pending_get_rsp[seq_no]), state.num_writes, [])
           if is_enough do 
+            #coalesce of clocks
+            result = Dynamo.VectorClock.coalesce2(responses)
             {:ok, msg} = Map.fetch(state.pending_get_msg, seq_no)
-            send(msg.client, {key, responses})
+            send(msg.client, {key, result})
             server(state, nil)
           end
           server(state, nil)
@@ -538,46 +541,97 @@ defmodule Dynamo.Client do
 
   alias __MODULE__
   @enforce_keys [:node_list]
-  defstruct(node_list: nil, local_store: nil)
+  defstruct(node_list: nil, test_client: nil)
     @spec new_client(atom()) :: %Dynamo.Client{node_list: atom()}
   def new_client(node_list) do
     IO.puts("CREATING A CLIENT")
     %Dynamo.Client{node_list: node_list,
-            local_store: %{}}
+            test_client: nil
+          }
   end
 
-  @spec put(%Dynamo.Client{}, string(), map() , non_neg_integer(), atom()) :: boolean()
-  def put(client, key, metadata, value, server, node_list \\ nil) do
-    me = whoami()
-    node_list = if node_list == nil do client.node_list else node_list end
+  @spec client(%Dynamo.Client{}) :: no_return() 
+  def client(state) do 
+    receive do 
+      {sender, %Dynamo.ToClientPutMessage{
+        key: key, 
+        value: value, 
+        metadata: metadata, 
+        node_list: node_list
+      }} -> 
+        me = whoami()
+        node_list = if node_list == nil do state.node_list else node_list end
+    
+        server =  Enum.random(node_list)
+    
+        metadata = if map_size(metadata) == 0  do %Dynamo.VectorClock{} else Dynamo.VectorClock.converge(metadata) end
+        send(server, %Dynamo.Client.PutMessage{
+                        key: key,
+                        metadata: metadata,
+                        value: value,
+                        client: me
+                      })
 
-    server =  Enum.random(node_list)
+        client(%{state| test_client: sender})
+      {sender, %Dynamo.ToClientGetMessage{
+        key: key, 
+        metadata: metadata, 
+        node_list: node_list
+      }} ->
+        me = whoami()
+        node_list = if node_list == nil do state.node_list else node_list end
+        server =  Enum.random(node_list)
+        send(server, %Dynamo.Client.GetMessage{
+                        key: key,
+                        metadata: metadata,
+                        client: me
+                      }
+                    )
+        client(%{state| test_client: sender})
+      
+      {sender, {key, responses}} -> 
+        send(state.test_client, {:get, key, responses})
+        client(state)
 
-    metadata = if map_size(metadata) == 0  do %Dynamo.VectorClock{} else Dynamo.VectorClock.converge(metadata) end
-    send(server, %Dynamo.Client.PutMessage{
-                    key: key,
-                    metadata: metadata,
-                    value: value,
-                    client: me
-                  }
-                )
-
+      {sender, {:ok, key}} -> 
+        send(state.test_client, {:put, :ok, key})
+        client(state)
+    end 
   end
 
-  @spec get(%Dynamo.Client{}, string(), map(), atom()) :: boolean()
-  def get(client, key, metadata, server, node_list \\ nil) do
-    me = whoami()
-    node_list = if node_list == nil do client.node_list else node_list end
-    server =  Enum.random(node_list)
-    send(server, %Dynamo.Client.GetMessage{
-                    key: key,
-                    metadata: metadata,
-                    client: me
-                  }
-                )
-  end
 
-end
+#   @spec put(%Dynamo.Client{}, string(), map() , non_neg_integer(), atom()) :: boolean()
+#   def put(client, key, metadata, value, server, node_list \\ nil) do
+#     me = whoami()
+#     node_list = if node_list == nil do client.node_list else node_list end
+
+#     server =  Enum.random(node_list)
+
+#     metadata = if map_size(metadata) == 0  do %Dynamo.VectorClock{} else Dynamo.VectorClock.converge(metadata) end
+#     send(server, %Dynamo.Client.PutMessage{
+#                     key: key,
+#                     metadata: metadata,
+#                     value: value,
+#                     client: me
+#                   }
+#                 )
+
+#   end
+
+#   @spec get(%Dynamo.Client{}, string(), map(), atom()) :: boolean()
+#   def get(client, key, metadata, server, node_list \\ nil) do
+#     me = whoami()
+#     node_list = if node_list == nil do client.node_list else node_list end
+#     server =  Enum.random(node_list)
+#     send(server, %Dynamo.Client.GetMessage{
+#                     key: key,
+#                     metadata: metadata,
+#                     client: me
+#                   }
+#                 )
+#   end
+
+# end
 
 
 
