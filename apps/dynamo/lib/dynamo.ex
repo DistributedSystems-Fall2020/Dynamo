@@ -541,12 +541,13 @@ defmodule Dynamo.Client do
 
   alias __MODULE__
   @enforce_keys [:node_list]
-  defstruct(node_list: nil, test_client: nil)
+  defstruct(node_list: nil, test_client: nil, local_store: nil)
     @spec new_client(atom()) :: %Dynamo.Client{node_list: atom()}
   def new_client(node_list) do
     IO.puts("CREATING A CLIENT")
     %Dynamo.Client{node_list: node_list,
-            test_client: nil
+            test_client: nil, 
+            local_store: %{}
           }
   end
 
@@ -581,6 +582,7 @@ defmodule Dynamo.Client do
         me = whoami()
         node_list = if node_list == nil do state.node_list else node_list end
         server =  Enum.random(node_list)
+        metadata = Map.get(state.local_store, key, %{})
         send(server, %Dynamo.Client.GetMessage{
                         key: key,
                         metadata: metadata,
@@ -591,13 +593,16 @@ defmodule Dynamo.Client do
       
       {sender, {key, responses}} -> 
         send(state.test_client, {:get, key, responses})
-        client(state)
+        local_store = state.local_store
+        local_store = Map.put(local_store, key, responses)
+        client(%{state| local_store: local_store})
 
       {sender, {:ok, key}} -> 
         send(state.test_client, {:put, :ok, key})
         client(state)
     end 
   end
+end 
 
 
 #   @spec put(%Dynamo.Client{}, string(), map() , non_neg_integer(), atom()) :: boolean()
