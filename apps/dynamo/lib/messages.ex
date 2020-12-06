@@ -197,7 +197,7 @@ defmodule Dynamo.ToClientPutMessage do
             value: 1, 
             node_list: [:a, :b, :c]
           }
-        IO.puts("Checking struct #{inspect(k)}")
+        # IO.puts("Checking struct #{inspect(k)}")
     end 
 end
 
@@ -232,7 +232,7 @@ defmodule Dynamo.ToClientGetMessage do
             metadata: %{}, 
             node_list: [:a, :b, :c]
           }
-        IO.puts("Checking struct #{inspect(k)}")
+        # IO.puts("Checking struct #{inspect(k)}")
     end 
 
 end
