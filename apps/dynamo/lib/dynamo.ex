@@ -154,7 +154,7 @@ defmodule Dynamo do
           {:ok, pending_put_req_seq_no} = Map.fetch(state.pending_put_req, seq_no)
           pending_put_req_seq_no = MapSet.put(pending_put_req_seq_no, head)
           pending_put_req = Map.put(state.pending_put_req, seq_no, pending_put_req_seq_no)
-          timer = Emulation.timer(50, {:timer, me, head, seq_no})
+          timer = Emulation.timer(100, {:timer, me, head, seq_no})
           # IO.puts("Inserting timer for PUT #{inspect(me)} #{inspect(head)} #{inspect(seq_no)} #{inspect(timer)}")
           msg_timers = Map.put(state.msg_timers, {:timer, me, head, seq_no}, timer)
           state = %{state | msg_timers: msg_timers, pending_put_req: pending_put_req}
@@ -296,7 +296,7 @@ defmodule Dynamo do
           server(state, extra_state)
         end
 
-        delay = Enum.random(Enum.to_list(100..300))
+        delay = Enum.random(Enum.to_list(100..200))
         # IO.puts("Delay: #{inspect(delay)}")
         Process.sleep(delay)
 
@@ -385,7 +385,7 @@ defmodule Dynamo do
 
         # IO.puts("Server received PUT")
 
-        delay = Enum.random(Enum.to_list(100..300))
+        delay = Enum.random(Enum.to_list(50..200))
         # IO.puts("Delay: #{inspect(delay)}")
         Process.sleep(delay)
 

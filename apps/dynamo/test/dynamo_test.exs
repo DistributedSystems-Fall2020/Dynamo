@@ -119,11 +119,11 @@ defmodule DynamoTest do
     tester2 = 
       spawn(:tester2, fn ->
         # IO.puts("HI")
+
         node_list = [:b, :c, :e]
         fail = Enum.random(node_list)
-        # IO.puts("Failed: #{inspect(fail)}")
-        # send(fail, {:fail, 200})
         send(fail, {:fail, 200})
+
         # Process.sleep(200)
 
         send(:client2, :change_test)
@@ -132,7 +132,8 @@ defmodule DynamoTest do
           value: 2, 
           metadata: nil, 
           node_list: nil
-        })
+
+          })
 
 
         receive do 
@@ -145,7 +146,7 @@ defmodule DynamoTest do
         end
 
         # IO.puts("HERE")
-        # Process.sleep(50)
+        Process.sleep(0)
         # IO.puts("HERE NEXT")
 
         send(:client2, %Dynamo.ToClientGetMessage{
