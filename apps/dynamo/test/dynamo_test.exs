@@ -1,12 +1,10 @@
-#The test cases are in charge of generating a random server for each of the client requests
-
+# The test cases are in charge of generating a random server for each of the client requests
 
 defmodule DynamoTest do
   use ExUnit.Case
   doctest Dynamo
-  import Emulation, only: [spawn: 2, send: 2] 
+  import Emulation, only: [spawn: 2, send: 2]
 
-  
   import Kernel,
     except: [spawn: 3, spawn: 1, spawn_link: 1, spawn_link: 3, send: 2]
 
@@ -41,16 +39,15 @@ defmodule DynamoTest do
   #   end
   # end
 
-  test "Nothing crashes during startup" do 
-    Emulation.init() 
+  test "Nothing crashes during startup" do
+    Emulation.init()
     # Emulation.append_fuzzers([Fuzzers.delay(10), Fuzzers.drop(0.1)])
     # Emulation.append_fuzzers([Fuzzers.delay(50)])
-
 
     # base_config =  Dynamo.new_configuration(10, 3, 2, 2, [:a, :b, :c, :d, :e, :f, :g, :h, :i, :j])
     # base_client_config = Dynamo.Client.new_client([:a, :b, :c, :d, :e, :f, :g, :h, :i, :j])
 
-    base_config =  Dynamo.new_configuration(10, 3, 1, 1, [:a, :b, :c, :d, :e])
+    base_config = Dynamo.new_configuration(10, 3, 1, 1, [:a, :b, :c, :d, :e])
     base_client_config = Dynamo.Client.new_client([:a, :b, :c, :d, :e])
 
     # base_config =  Dynamo.new_configuration(10, 3, 2, 2, [:b, :c, :d])
@@ -66,57 +63,64 @@ defmodule DynamoTest do
     # i = spawn(:i, fn -> Dynamo.become_server(base_config) end)
     # j = spawn(:j, fn -> Dynamo.become_server(base_config) end)
     client = spawn(:client, fn -> Dynamo.Client.client(base_client_config) end)
-    client2 = spawn(:client2, fn -> Dynamo.Client.client(base_client_config) end)
-    client3 = spawn(:client3, fn -> Dynamo.Client.client(base_client_config) end)
 
-    tester = 
+    client2 =
+      spawn(:client2, fn -> Dynamo.Client.client(base_client_config) end)
+
+    client3 =
+      spawn(:client3, fn -> Dynamo.Client.client(base_client_config) end)
+
+    tester =
       spawn(:tester, fn ->
         # IO.puts("HI")
         send(:client, :change_test)
+
         send(:client, %Dynamo.ToClientPutMessage{
-          key: "key", 
-          value: 1, 
-          metadata: nil, 
+          key: "key",
+          value: 1,
+          metadata: nil,
           node_list: nil
         })
 
-        receive do 
-          {sender, {:put, :ok, key}} -> 
+        receive do
+          {sender, {:put, :ok, key}} ->
             # IO.puts("Test put 1 - #{inspect(key)}")
             IO.puts("PUT 1: #{inspect(key)}")
 
-          {sender, {:get, key, responses}} -> 
-            [{value, clock}|tail] = responses
+          {sender, {:get, key, responses}} ->
+            [{value, clock} | tail] = responses
             # IO.puts("Test get 1 - #{inspect(responses)}")
             IO.puts("GET 1: #{inspect(value)}")
         end
+
         Process.sleep(200)
 
         send(:client, %Dynamo.ToClientGetMessage{
-          key: "key", 
-          metadata: nil, 
-          node_list: nil})
+          key: "key",
+          metadata: nil,
+          node_list: nil
+        })
+
         # Process.sleep(200)
-          # Process.sleep(200)
-          receive do 
-            {sender, {:put, :ok, key}} -> 
-              IO.puts("PUT 1: #{inspect(key)}")
+        # Process.sleep(200)
+        receive do
+          {sender, {:put, :ok, key}} ->
+            IO.puts("PUT 1: #{inspect(key)}")
 
-            {sender, {:get, key, responses}} -> 
-              [{value, clock}|tail] = responses
-              IO.puts("GET 1: #{inspect(value)}")
-              # IO.puts("Test get 1 - #{inspect(responses)}")
-          end
-          # IO.puts("start")
-          Process.sleep(1000)
-          # IO.puts("end")
+          {sender, {:get, key, responses}} ->
+            [{value, clock} | tail] = responses
+            IO.puts("GET 1: #{inspect(value)}")
+            # IO.puts("Test get 1 - #{inspect(responses)}")
         end
-      )
 
-    
+        # IO.puts("start")
+        Process.sleep(1000)
+        # IO.puts("end")
+      end)
+
     Process.sleep(200)
 
-    tester2 = 
+    tester2 =
       spawn(:tester2, fn ->
         # IO.puts("HI")
 
@@ -127,21 +131,20 @@ defmodule DynamoTest do
         # Process.sleep(200)
 
         send(:client2, :change_test)
+
         send(:client2, %Dynamo.ToClientPutMessage{
-          key: "key", 
-          value: 2, 
-          metadata: nil, 
+          key: "key",
+          value: 2,
+          metadata: nil,
           node_list: nil
+        })
 
-          })
-
-
-        receive do 
-          {sender, {:put, :ok, key}} -> 
+        receive do
+          {sender, {:put, :ok, key}} ->
             IO.puts("PUT 2: #{inspect(key)}")
 
-          {sender, {:get, key, responses}} -> 
-            [{value, clock}|tail] = responses
+          {sender, {:get, key, responses}} ->
+            [{value, clock} | tail] = responses
             IO.puts("GET 2: #{inspect(value)}")
         end
 
@@ -150,25 +153,26 @@ defmodule DynamoTest do
         # IO.puts("HERE NEXT")
 
         send(:client2, %Dynamo.ToClientGetMessage{
-          key: "key", 
-          metadata: nil, 
-          node_list: nil})
-          # Process.sleep(200)
-          receive do 
-            {sender, {:put, :ok, key}} -> 
-              IO.puts("PUT 2: #{inspect(key)}")
+          key: "key",
+          metadata: nil,
+          node_list: nil
+        })
 
-            {sender, {:get, key, responses}} -> 
-              [{value, clock}|tail] = responses
-              IO.puts("GET 2: #{inspect(value)}")
-          end
-          # IO.puts("start")
-          Process.sleep(1000)
-          # IO.puts("end")
+        # Process.sleep(200)
+        receive do
+          {sender, {:put, :ok, key}} ->
+            IO.puts("PUT 2: #{inspect(key)}")
+
+          {sender, {:get, key, responses}} ->
+            [{value, clock} | tail] = responses
+            IO.puts("GET 2: #{inspect(value)}")
         end
-      )
 
-    
+        # IO.puts("start")
+        Process.sleep(1000)
+        # IO.puts("end")
+      end)
+
     # Process.sleep(1000)
 
     # tester3 = 
@@ -324,30 +328,29 @@ defmodule DynamoTest do
     #       metadata: nil, 
     #       node_list: nil})
 
-        # send(:client2, %Dynamo.ToClientPutMessage{
-        #   key: "key", 
-        #   value: 3, 
-        #   metadata: nil, 
-        #   node_list: nil
-        # })
-        # # Process.sleep(20)
-        # send(:client2, %Dynamo.ToClientGetMessage{
-        #   key: "key", 
-        #   metadata: nil, 
-        #   node_list: nil})
+    # send(:client2, %Dynamo.ToClientPutMessage{
+    #   key: "key", 
+    #   value: 3, 
+    #   metadata: nil, 
+    #   node_list: nil
+    # })
+    # # Process.sleep(20)
+    # send(:client2, %Dynamo.ToClientGetMessage{
+    #   key: "key", 
+    #   metadata: nil, 
+    #   node_list: nil})
 
-        
-        # send(:client2, %Dynamo.ToClientPutMessage{
-        #   key: "key", 
-        #   value: 4, 
-        #   metadata: nil, 
-        #   node_list: nil
-        # })
-        # # Process.sleep(20)
-        # send(:client2, %Dynamo.ToClientGetMessage{
-        #   key: "key", 
-        #   metadata: nil, 
-        #   node_list: nil})
+    # send(:client2, %Dynamo.ToClientPutMessage{
+    #   key: "key", 
+    #   value: 4, 
+    #   metadata: nil, 
+    #   node_list: nil
+    # })
+    # # Process.sleep(20)
+    # send(:client2, %Dynamo.ToClientGetMessage{
+    #   key: "key", 
+    #   metadata: nil, 
+    #   node_list: nil})
 
     #     # Process.sleep(20)
     #     # send(:g, %Dynamo.ToClientPutMessage{
@@ -356,51 +359,44 @@ defmodule DynamoTest do
     #     #   metadata: nil, 
     #     #   node_list: nil})
 
-          
-          # receive do 
-          #   {sender, {:put, :ok, key}} -> 
-          #     IO.puts("Test put 3 - #{inspect(key)}")
+    # receive do 
+    #   {sender, {:put, :ok, key}} -> 
+    #     IO.puts("Test put 3 - #{inspect(key)}")
 
-          #   {sender, {:get, key, responses}} -> 
-          #     IO.puts("Test get 3 - #{inspect(responses)}")
-          # end
-          # receive do 
-          #   {sender, {:put, :ok, key}} -> 
-          #     IO.puts("Test put 4 - #{inspect(key)}")
+    #   {sender, {:get, key, responses}} -> 
+    #     IO.puts("Test get 3 - #{inspect(responses)}")
+    # end
+    # receive do 
+    #   {sender, {:put, :ok, key}} -> 
+    #     IO.puts("Test put 4 - #{inspect(key)}")
 
-          #   {sender, {:get, key, responses}} -> 
-          #     IO.puts("Test get 4 - #{inspect(responses)}")
-          # end
-          # receive do 
-          #   {sender, {:put, :ok, key}} -> 
-          #     IO.puts("Test put 5 - #{inspect(key)}")
+    #   {sender, {:get, key, responses}} -> 
+    #     IO.puts("Test get 4 - #{inspect(responses)}")
+    # end
+    # receive do 
+    #   {sender, {:put, :ok, key}} -> 
+    #     IO.puts("Test put 5 - #{inspect(key)}")
 
-          #   {sender, {:get, key, responses}} -> 
-          #     IO.puts("Test get 5 - #{inspect(responses)}")
-          # end
-          # receive do 
-          #   {sender, {:put, :ok, key}} -> 
-          #     IO.puts("Test put 6 - #{inspect(key)}")
+    #   {sender, {:get, key, responses}} -> 
+    #     IO.puts("Test get 5 - #{inspect(responses)}")
+    # end
+    # receive do 
+    #   {sender, {:put, :ok, key}} -> 
+    #     IO.puts("Test put 6 - #{inspect(key)}")
 
-          #   {sender, {:get, key, responses}} -> 
-          #     IO.puts("Test get 6 - #{inspect(responses)}")
-          # end
-          # receive do 
-          #   {sender, {:put, :ok, key}} -> 
-          #     IO.puts("Test put 7 - #{inspect(key)}")
+    #   {sender, {:get, key, responses}} -> 
+    #     IO.puts("Test get 6 - #{inspect(responses)}")
+    # end
+    # receive do 
+    #   {sender, {:put, :ok, key}} -> 
+    #     IO.puts("Test put 7 - #{inspect(key)}")
 
-          #   {sender, {:get, key, responses}} -> 
-          #     IO.puts("Test get 7 - #{inspect(responses)}")
-          # end
-      #     Process.sleep(1000)
-      #   end
-      # )
-
-
-
-
-
-
+    #   {sender, {:get, key, responses}} -> 
+    #     IO.puts("Test get 7 - #{inspect(responses)}")
+    # end
+    #     Process.sleep(1000)
+    #   end
+    # )
 
     #   Process.sleep(100)
     #   tester3 = 
@@ -507,7 +503,6 @@ defmodule DynamoTest do
     #     end
     #   )
 
-
     #   # Process.sleep(10)
     #   tester4 = 
     #   spawn(:tester4, fn ->
@@ -565,5 +560,5 @@ defmodule DynamoTest do
     Process.sleep(1000)
   after
     Emulation.terminate()
-  end 
+  end
 end
