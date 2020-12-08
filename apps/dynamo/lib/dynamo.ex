@@ -464,9 +464,9 @@ defmodule Dynamo do
           server(state, extra_state)
         end
 
-        delay = Enum.random(Enum.to_list(100..200))
-        # IO.puts("Delay: #{inspect(delay)}")
-        Process.sleep(delay)
+        # delay = Enum.random(Enum.to_list(1..50))
+        # # IO.puts("Delay: #{inspect(delay)}")
+        # Process.sleep(delay)
 
         seq_no = get_next_seq_no(state)
         # IO.puts("Server received GET: #{inspect(me)} #{seq_no}")
@@ -599,9 +599,9 @@ defmodule Dynamo do
 
         # IO.puts("Server received PUT")
 
-        delay = Enum.random(Enum.to_list(50..200))
-        # IO.puts("Delay: #{inspect(delay)}")
-        Process.sleep(delay)
+        # delay = Enum.random(Enum.to_list(1..50))
+        # # IO.puts("Delay: #{inspect(delay)}")
+        # Process.sleep(delay)
 
         seq_no = get_next_seq_no(state)
         # IO.puts("Server received PUT: #{inspect(me)} #{seq_no}")
